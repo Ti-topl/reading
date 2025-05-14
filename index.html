@@ -74,7 +74,6 @@
     const mainContent = document.getElementById("main-content");
     const errorMessage = document.getElementById("error-message");
 
-    // 비밀번호 확인 이벤트 연결
     document.getElementById("login-button").addEventListener("click", function (event) {
       event.preventDefault();
       const input = document.getElementById("password-input").value;
@@ -93,7 +92,12 @@
     const langDisplay = document.getElementById("detected-language");
 
     let extractedText = "";
-    let detectedLang = "ko-KR"; // 기본값
+    let detectedLang = "ko-KR";
+    let availableVoices = [];
+
+    speechSynthesis.onvoiceschanged = () => {
+      availableVoices = speechSynthesis.getVoices();
+    };
 
     speedRange.addEventListener("input", () => {
       speedDisplay.textContent = speedRange.value;
@@ -101,7 +105,7 @@
 
     fileInput.addEventListener("change", (event) => {
       const file = event.target.files[0];
-      if (file.type !== "application/pdf") {
+      if (!file || file.type !== "application/pdf") {
         alert("PDF 파일만 업로드 가능합니다.");
         return;
       }
@@ -127,7 +131,6 @@
             extractedText = texts.join("\n\n");
             output.textContent = extractedText;
 
-            // 간단한 언어 감지
             detectedLang = detectLanguage(extractedText);
             langDisplay.textContent = `감지된 언어: ${detectedLang}`;
           });
@@ -152,16 +155,30 @@
         return;
       }
 
-      const utterance = new SpeechSynthesisUtterance(extractedText);
-      utterance.lang = detectedLang;
-      utterance.rate = parseFloat(speedRange.value);
+      window.speechSynthesis.cancel();
 
-      const voices = speechSynthesis.getVoices();
-      const preferred = voices.find(v => v.lang === detectedLang && v.name.includes("Google")) ||
-                        voices.find(v => v.lang === detectedLang);
-      if (preferred) utterance.voice = preferred;
+      const sentences = extractedText.match(/[^.!?]+[.!?]?/g) || [extractedText]; // 문장 단위 분할
+      let index = 0;
 
-      window.speechSynthesis.speak(utterance);
+      function speakNext() {
+        if (index >= sentences.length) return;
+
+        const utterance = new SpeechSynthesisUtterance(sentences[index].trim());
+        utterance.lang = detectedLang;
+        utterance.rate = parseFloat(speedRange.value);
+
+        const selectedVoice = availableVoices.find(v => v.lang === detectedLang);
+        if (selectedVoice) utterance.voice = selectedVoice;
+
+        utterance.onend = () => {
+          index++;
+          speakNext(); // 다음 문장 읽기
+        };
+
+        window.speechSynthesis.speak(utterance);
+      }
+
+      speakNext();
     }
   </script>
 </body>
