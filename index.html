@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>PDF 음성 읽기 도구</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 40px;
+      background-color: #f4f4f4;
+      color: #333;
+    }
+    h1 {
+      color: #005b9f;
+    }
+    #output {
+      white-space: pre-wrap;
+      margin-top: 20px;
+      padding: 15px;
+      background: #fff;
+      border: 1px solid #ccc;
+    }
+    button {
+      margin-top: 15px;
+    }
+    #access-container {
+      background: #fff;
+      padding: 30px;
+      border: 1px solid #ccc;
+      max-width: 400px;
+      margin: 100px auto;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    #main-content {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 비밀번호 보호 화면 -->
+  <div id="access-container">
+    <h2>접근 제한</h2>
+    <p>비밀번호를 입력하세요:</p>
+    <input type="password" id="password-input" />
+    <button onclick="checkPassword()">확인</button>
+    <p id="error-message" style="color: red; display: none;">비밀번호가 틀렸습니다.</p>
+  </div>
+
+  <!-- 본문 -->
+  <div id="main-content">
+    <h1>PDF 텍스트 음성 변환 도구</h1>
+    <input type="file" id="file-input" accept="application/pdf" />
+    
+    <div style="margin-top: 20px;">
+      <label for="speed-range">음성 속도: <span id="speed-display">1.0</span>x</label><br />
+      <input type="range" id="speed-range" min="0.5" max="2.0" step="0.1" value="1.0" />
+    </div>
+
+    <button onclick="speakText()">텍스트 읽기</button>
+    <div id="output"></div>
+    <p id="detected-language" style="margin-top: 10px; color: #666;"></p>
+  </div>
+
+  <!-- PDF.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+  <script>
+    const correctPassword = "qwer#@!";
+    const accessContainer = document.getElementById("access-container");
+    const mainContent = document.getElementById("main-content");
+    const errorMessage = document.getElementById("error-message");
+
+    function checkPassword() {
+      const input = document.getElementById("password-input").value;
+      if (input === correctPassword) {
+        accessContainer.style.display = "none";
+        mainContent.style.display = "block";
+      } else {
+        errorMessage.style.display = "block";
+      }
+    }
+
+    const fileInput = document.getElementById("file-input");
+    const output = document.getElementById("output");
+    const speedRange = document.getElementById("speed-range");
+    const speedDisplay = document.getElementById("speed-display");
+    const langDisplay = document.getElementById("detected-language");
+
+    let extractedText = "";
+    let detectedLang = "ko-KR"; // 기본값
+
+    speedRange.addEventListener("input", () => {
+      speedDisplay.textContent = speedRange.value;
+    });
+
+    fileInput.addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      if (file.type !== "application/pdf") {
+        alert("PDF 파일만 업로드 가능합니다.");
+        return;
+      }
+
+      const fileReader = new FileReader();
+      fileReader.onload = function () {
+        const typedArray = new Uint8Array(this.result);
+
+        pdfjsLib.getDocument(typedArray).promise.then(function (pdf) {
+          let textPromises = [];
+
+          for (let i = 1; i <= pdf.numPages; i++) {
+            textPromises.push(
+              pdf.getPage(i).then((page) => {
+                return page.getTextContent().then((content) => {
+                  return content.items.map((item) => item.str).join(" ");
+                });
+              })
+            );
+          }
+
+          Promise.all(textPromises).then((texts) => {
+            extractedText = texts.join("\n\n");
+            output.textContent = extractedText;
+
+            // 간단한 언어 감지
+            detectedLang = detectLanguage(extractedText);
+            langDisplay.textContent = `감지된 언어: ${detectedLang}`;
+          });
+        });
+      };
+
+      fileReader.readAsArrayBuffer(file);
+    });
+
+    function detectLanguage(text) {
+      const lower = text.toLowerCase();
+      if (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(text)) return "ko-KR";
+      else if (/[一-龥]/.test(text)) return "zh-CN";
+      else if (/[ぁ-んァ-ン]/.test(text)) return "ja-JP";
+      else if (/[a-z]/.test(lower)) return "en-US";
+      else return "ko-KR"; // 기본값
+    }
+
+    function speakText() {
+      if (!extractedText) {
+        alert("먼저 PDF 파일을 업로드하세요.");
+        return;
+      }
+      
+const utterance = new SpeechSynthesisUtterance(text);
+
+// 기기에 설치된 음성 목록 중 자연스러운 것을 우선 선택
+const voices = speechSynthesis.getVoices();
+const preferred = voices.find(v => v.lang.startsWith('ko') && v.name.includes("Google")) ||
+                  voices.find(v => v.lang.startsWith('ko'));
+if (preferred) utterance.voice = preferred;
+      const utterance = new SpeechSynthesisUtterance(extractedText);
+      utterance.lang = detectedLang;
+      utterance.rate = parseFloat(speedRange.value);
+      window.speechSynthesis.speak(utterance);
+    }
+  </script>
+</body>
+</html>
